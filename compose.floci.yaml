@@ -1,0 +1,22 @@
+name: projectgo-floci
+
+services:
+  floci:
+    image: floci/floci:2.3.0@sha256:e0b292df4dc9559b7b1bf4f51bdda4bb8e269276236438cd03cae661260ea8a9
+    restart: unless-stopped
+    ports:
+      # The lab VM uses NAT; VirtualBox exposes this port on Mac loopback only.
+      - "4566:4566"
+    environment:
+      FLOCI_HOSTNAME: floci
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+      FLOCI_SERVICES_DOCKER_NETWORK: projectgo-floci_default
+      FLOCI_SERVICES_UI_ENABLED: "false"
+    volumes:
+      - floci-data:/app/data
+      # EC2 and Lambda create containers in the guest Docker Engine.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  floci-data:

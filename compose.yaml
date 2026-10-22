@@ -1,0 +1,82 @@
+name: projectgo-library
+
+x-app-env: &app-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-libratrack_devops}
+  APP_DB_USER: ${APP_DB_USER:-libratrack}
+  APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Generate .env with scripts/init-library-env.py}
+
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:deb28ee471183cb0c303113dac9b2433c51eeeeb678def7af9a9ec5820367815
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-libratrack_devops}
+      POSTGRES_USER: ${POSTGRES_USER:-libratrack_bootstrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate .env with scripts/init-library-env.py}
+      APP_DB_USER: ${APP_DB_USER:-libratrack}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Generate .env with scripts/init-library-env.py}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    image: projectgo/libratrack:lesson10-1
+    build: .
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      JWT_SECRET: ${JWT_SECRET:?Generate .env with scripts/init-library-env.py}
+      COOKIE_SECURE: "false"
+      ALLOWED_ORIGIN: http://127.0.0.1:${APP_PORT:-8080}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  demo-users:
+    image: projectgo/libratrack:lesson10-1
+    profiles: [tools]
+    entrypoint: [/demo-users]
+    environment:
+      <<: *app-env
+    working_dir: /output
+    volumes:
+      - ${PROJECTGO_ARTIFACTS_DIR:-../projectgo-artifacts}/accounts:/output
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  tests:
+    image: golang:1.27.3@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc
+    profiles: [test]
+    working_dir: /src
+    volumes:
+      - .:/src:ro
+      - go-modules:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    environment:
+      TEST_DATABASE_URL: postgres://${APP_DB_USER:-libratrack}:${APP_DB_PASSWORD:?Generate .env with scripts/init-library-env.py}@postgres:5432/${POSTGRES_DB:-libratrack_devops}_test?sslmode=disable
+    command: [go, test, -race, -p, "2", -count=1, -json, ./...]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  go-modules:
+  go-build:
