@@ -1,0 +1,46 @@
+LibraTrack — Lesson 10 prompt log
+
+Task 2.1 — Layout, catalog and book row
+Create Ukrainian html/template views for the existing Gin/PostgreSQL LibraTrack
+application. Use web/templates/layout.html with {{block "content" .}}, named nav
+and book_row partials, and separate page template sets so content definitions do
+not override each other. Render the catalog as a semantic table with title, ISBN,
+authors, category, available/total copies, detail links and staff-only actions.
+Use <tbody id="book-list"> as the fragment target. Add a labeled search form,
+category filter, empty state and ordinary forms for creating/editing/deleting
+books. Keep inputs escaped; do not use template.HTML for data. Provide login,
+reader registration, validation feedback, responsive local CSS and accessible
+labels. Use typed page/form data. Preserve the existing repository interfaces
+and API behavior; no browser framework or CDN dependency.
+
+Task 2.2 — Live search, deletion and web handlers
+Add handlers in internal/handler/web and register them through internal/app,
+called from cmd/api. GET /catalog renders a full layout. GET /web/books?q=Go
+renders only book_row fragments. Use hx-get="/web/books",
+hx-trigger="keyup changed delay:300ms", hx-target="#book-list", and include
+category filters. Cancel obsolete search requests. For staff deletion use
+hx-delete="/web/books/{{.Book.ID}}", hx-target="closest tr",
+hx-swap="outerHTML", hx-confirm="Delete this book?". Return an empty 200 only
+when repository deletion succeeds. Render errors into a feedback area without
+removing the row. Enforce librarian/admin authorization on the server; guest and
+reader deletion attempts return 403. Browser JWTs use HttpOnly cookies with
+SameSite and configurable Secure; use CSRF tokens bound to the session for forms
+and HTMX writes. Share credential validation with the existing Bearer API.
+
+Task 3.1 — Embedded runtime resources
+Add web/templates.go and web/static.go. Embed templates and static assets,
+parse templates with html/template.ParseFS, use fs.Sub for /static/, and ship
+htmx.min.js locally. Embed versioned SQL migrations because cmd/api applies them
+on startup. Keep secrets in environment variables. Verify both a native binary
+in an otherwise empty directory and a CGO_ENABLED=0 Linux binary in scratch,
+without source mounts or external template/static/migration files.
+
+Task 3.2 — Verification
+Write table-driven httptest/PostgreSQL tests in
+internal/handler/web/catalog_test.go against the real application router.
+Cover full catalog markup; search fragments without a layout; availability;
+CRUD and preserved validation input; empty 200 deletion; guest/reader 403;
+login/logout/registration; HttpOnly/Secure/SameSite cookies; session-bound CSRF;
+XSS escaping; literal search characters; role changes and constant query count.
+Keep inherited API and migration tests. Report actual results and distinguish
+automated verification from the student's pending manual audit and screenshots.
