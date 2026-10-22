@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: libratrack
+  namespace: libratrack
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: libratrack
+  template:
+    metadata:
+      labels:
+        app: libratrack
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: projectgo/libratrack:lesson10-1
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: libratrack_k3s
+            - name: APP_DB_USER
+              value: libratrack
+            - name: APP_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: library-app
+                  key: APP_DB_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: library-app
+                  key: JWT_SECRET
+            - name: COOKIE_SECURE
+              value: "false"
+            - name: ALLOWED_ORIGIN
+              value: http://127.0.0.1:30081
+          startupProbe:
+            httpGet:
+              path: /api/v1/books
+              port: http
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/v1/books
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: libratrack
+  namespace: libratrack
+spec:
+  type: NodePort
+  selector:
+    app: libratrack
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30081

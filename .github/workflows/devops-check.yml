@@ -1,0 +1,51 @@
+name: Lesson 10-1 DevOps check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lesson10-1-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROJECTGO_ARTIFACTS_DIR: ${{ runner.temp }}/projectgo-artifacts
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate scripts and configuration
+        run: |
+          find scripts infra -name '*.sh' -print0 | xargs -0 -n 1 bash -n
+          python3 - <<'PY'
+          from pathlib import Path
+          for path in Path('scripts').glob('*.py'):
+              compile(path.read_bytes(), str(path), 'exec')
+          PY
+          python3 scripts/init-library-env.py
+          docker compose --profile test --profile tools config -q
+          docker compose -f compose.floci.yaml config -q
+          docker compose -f compose.smoke.yaml config -q
+          test -z "$(git ls-files .env evidence artifacts reports printscreens screenshots verification)"
+      - name: Build and start LibraTrack with PostgreSQL
+        run: bash scripts/start-library.sh
+      - name: Verify API, catalog and persistent data
+        run: bash scripts/verify-library-persistence.sh
+      - name: Verify formatting and dependencies
+        run: |
+          docker compose --profile test run --rm -T tests sh -ec 'test -z "$(gofmt -l cmd internal docs web migrations)"; go mod tidy -diff'
+      - name: Run PostgreSQL tests with race detector and go vet
+        run: bash scripts/test-library.sh
+      - name: Verify tracked files remain unchanged
+        run: git diff --exit-code
+      - name: Stop CI services
+        if: always()
+        run: docker compose stop
