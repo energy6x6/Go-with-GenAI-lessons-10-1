@@ -18,10 +18,10 @@ jobs:
   compose:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      PROJECTGO_ARTIFACTS_DIR: ${{ runner.temp }}/projectgo-artifacts
     steps:
       - uses: actions/checkout@v4
+      - name: Configure external runtime directory
+        run: echo "PROJECTGO_ARTIFACTS_DIR=$RUNNER_TEMP/projectgo-artifacts" >> "$GITHUB_ENV"
       - name: Validate scripts and configuration
         run: |
           find scripts infra -name '*.sh' -print0 | xargs -0 -n 1 bash -n
@@ -44,6 +44,8 @@ jobs:
           docker compose --profile test run --rm -T tests sh -ec 'test -z "$(gofmt -l cmd internal docs web migrations)"; go mod tidy -diff'
       - name: Run PostgreSQL tests with race detector and go vet
         run: bash scripts/test-library.sh
+      - name: Check reachable vulnerabilities with Go 1.27.3
+        run: docker compose --profile test run --rm -T tests go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: Verify tracked files remain unchanged
         run: git diff --exit-code
       - name: Stop CI services
